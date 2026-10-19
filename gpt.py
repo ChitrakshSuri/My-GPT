@@ -33,12 +33,6 @@ itos = { i:ch for i,ch in enumerate(chars) }
 encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
 decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
 
-# Train and test splits
-data = torch.tensor(encode(text), dtype=torch.long)
-n = int(0.9*len(data)) # first 90% will be train, rest val
-train_data = data[:n]
-val_data = data[n:]
-
 # data loading
 def get_batch(split):
     # generate a small batch of data of inputs x and targets y
@@ -198,37 +192,44 @@ class GPTLanguageModel(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1) # (B, T+1)
         return idx
 
-model = GPTLanguageModel()
-m = model.to(device)
-# print the number of parameters in the model
-print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')
+if __name__ == '__main__':
+    # Train and test splits
+    data = torch.tensor(encode(text), dtype=torch.long)
+    n = int(0.9*len(data)) # first 90% will be train, rest val
+    train_data = data[:n]
+    val_data = data[n:]
 
-# create a PyTorch optimizer
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    model = GPTLanguageModel()
+    m = model.to(device)
+    # print the number of parameters in the model
+    print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')
 
-start_time = time.time()
-progress = tqdm(range(max_iters), desc="training")
-for iter in progress:
+    # create a PyTorch optimizer
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
-    # every once in a while evaluate the loss on train and val sets
-    if iter % eval_interval == 0 or iter == max_iters - 1:
-        losses = estimate_loss()
-        elapsed = time.time() - start_time
-        print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f} ({elapsed:.1f}s elapsed)", flush=True)
+    start_time = time.time()
+    progress = tqdm(range(max_iters), desc="training")
+    for iter in progress:
 
-    # sample a batch of data
-    xb, yb = get_batch('train')
+        # every once in a while evaluate the loss on train and val sets
+        if iter % eval_interval == 0 or iter == max_iters - 1:
+            losses = estimate_loss()
+            elapsed = time.time() - start_time
+            print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f} ({elapsed:.1f}s elapsed)", flush=True)
 
-    # evaluate the loss
-    logits, loss = model(xb, yb)
-    optimizer.zero_grad(set_to_none=True)
-    loss.backward()
-    optimizer.step()
+        # sample a batch of data
+        xb, yb = get_batch('train')
 
-    progress.set_postfix(loss=f"{loss.item():.4f}")
+        # evaluate the loss
+        logits, loss = model(xb, yb)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
 
-# generate from the model
-m.eval()
-context = torch.zeros((1, 1), dtype=torch.long, device=device)
-print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
-#open('more.txt', 'w').write(decode(m.generate(context, max_new_tokens=10000)[0].tolist()))
+        progress.set_postfix(loss=f"{loss.item():.4f}")
+
+    # generate from the model
+    m.eval()
+    context = torch.zeros((1, 1), dtype=torch.long, device=device)
+    print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
+    #open('more.txt', 'w').write(decode(m.generate(context, max_new_tokens=10000)[0].tolist()))
