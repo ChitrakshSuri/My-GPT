@@ -1,6 +1,8 @@
+import time
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from tqdm import tqdm
 
 # hyperparameters
 batch_size = 64 # how many independent sequences will we process in parallel?
@@ -53,7 +55,7 @@ def estimate_loss():
     model.eval()
     for split in ['train', 'val']:
         losses = torch.zeros(eval_iters)
-        for k in range(eval_iters):
+        for k in tqdm(range(eval_iters), desc=f"evaluating {split}", leave=False):
             X, Y = get_batch(split)
             logits, loss = model(X, Y)
             losses[k] = loss.item()
@@ -158,7 +160,6 @@ class GPTLanguageModel(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, idx, targets=None):
-
         B, T = idx.shape
 
         # idx and targets are both (B,T) tensor of integers
@@ -198,16 +199,21 @@ class GPTLanguageModel(nn.Module):
 
 model = GPTLanguageModel()
 m = model.to(device)
+# print the number of parameters in the model
+print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')
 
 # create a PyTorch optimizer
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
-for iter in range(max_iters):
+start_time = time.time()
+progress = tqdm(range(max_iters), desc="training")
+for iter in progress:
 
     # every once in a while evaluate the loss on train and val sets
-    if iter % eval_interval == 0:
+    if iter % eval_interval == 0 or iter == max_iters - 1:
         losses = estimate_loss()
-        print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        elapsed = time.time() - start_time
+        print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f} ({elapsed:.1f}s elapsed)", flush=True)
 
     # sample a batch of data
     xb, yb = get_batch('train')
@@ -218,6 +224,9 @@ for iter in range(max_iters):
     loss.backward()
     optimizer.step()
 
+    progress.set_postfix(loss=f"{loss.item():.4f}")
+
 # generate from the model
 context = torch.zeros((1, 1), dtype=torch.long, device=device)
 print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
+#open('more.txt', 'w').write(decode(m.generate(context, max_new_tokens=10000)[0].tolist()))
