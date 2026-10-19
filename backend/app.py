@@ -28,7 +28,7 @@ class TraceRequest(BaseModel):
     text: str = Field(max_length=500)
     max_tokens: int = Field(12, ge=1, le=32)
     layers: list[int] = [0]            # which blocks to return (0 to 5)
-    include_hidden: bool = False       # the wide feed-forward activations
+    include_hidden: bool = False       # a slice of the feed-forward layer for drawing
 
 
 class GenerateRequest(BaseModel):
@@ -46,6 +46,14 @@ def health():
 @app.get("/api/vocab")
 def vocab():
     return {"size": gpt.vocab_size, "chars": gpt.chars}
+
+
+@app.get("/api/token-table")
+def token_table(dims: int = 16):
+    # the first few numbers of every row of the token embedding table (65 rows)
+    model = need_model()
+    dims = max(1, min(dims, gpt.n_embd))
+    return {"rows": [[round(v, 3) for v in row] for row in model.token_embedding_table.weight[:, :dims].tolist()]}
 
 
 @app.post("/api/trace")
