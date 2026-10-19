@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPT Anatomy</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <filter id="wob" x="-10%" y="-20%" width="120%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3"/></filter>
+</defs></svg>
+
+<div class="app">
+  <header class="card top">
+    <h1 class="sc">GPT Anatomy<small>a dissection of a small GPT, step by step</small></h1>
+    <div class="prompt">
+      <label for="prompt">Your message:</label>
+      <input id="prompt" maxlength="200" value="To be or" placeholder="Type anything…" autocomplete="off" spellcheck="false">
+      <span class="ex"><button class="btn" data-ex="To be or">To be or</button><button class="btn" data-ex="First Citizen:">First Citizen:</button><button class="btn" data-ex="ROMEO:">ROMEO:</button></span>
+      <div class="pstat" id="pstat"></div>
+    </div>
+  </header>
+
+  <section class="card flowwrap" aria-label="Flow chart">
+    <div class="flowhd"><span class="sc" style="font-size:17px">How text becomes the next letter</span><span>hover a box to learn what it does · click it to open it up</span></div>
+    <div class="flow" id="flow"></div>
+  </section>
+
+  <main class="main">
+    <section class="card stage" id="stage">
+      <canvas id="gl" aria-label="3D model"></canvas>
+      <div class="crumbs" id="crumbs"></div>
+      <div class="cam">
+        <button class="btn" data-cam="front">Front</button><button class="btn" data-cam="side">Side</button><button class="btn" data-cam="top">Top</button>
+        <button class="btn" id="spin" aria-pressed="false">Spin</button><button class="btn" data-cam="reset">Reset</button>
+      </div>
+      <div class="hintbar" id="hintbar">drag to rotate · scroll to zoom · right-drag to move</div>
+      <div class="err" id="err"></div>
+      <div class="busy" id="busy">Asking the model…</div>
+      <div class="tip" id="tip"></div>
+      <div class="ctl" id="ctl"></div>
+    </section>
+    <aside class="card side" aria-live="polite">
+      <div class="tabs" id="tabs"></div>
+      <div class="pane" id="info"></div>
+    </aside>
+  </main>
+  <footer style="text-align:center;color:#26304a;font-size:15px;padding-bottom:4px">Explanations follow Andrej Karpathy’s “Let’s build GPT: from scratch, in code, spelled out”. Lettering: xkcd Script and Humor Sans.</footer>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
