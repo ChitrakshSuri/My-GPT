@@ -1,0 +1,122 @@
+import json
+
+import pytest
+import torch
+
+import app as A
+import model as M
+
+gpt = M.gpt
+
+
+def test_health(client, model):
+    r = client.get("/api/health")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "vocab_size": 65, "parameters": sum(p.numel() for p in model.parameters())}
+
+
+def test_vocab(client):
+    d = client.get("/api/vocab").json()
+    assert d["size"] == 65 == len(d["chars"])
+    assert d["chars"][0] == "\n" and " " in d["chars"]
+
+
+def test_token_table_default_and_custom_dims(client):
+    rows = client.get("/api/token-table").json()["rows"]
+    assert len(rows) == 65 and len(rows[0]) == 16
+    assert len(client.get("/api/token-table?dims=4").json()["rows"][0]) == 4
+
+
+def test_trace_endpoint(client):
+    r = client.post("/api/trace", json={"text": "To be or"})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["T"] == 8 and [layer["index"] for layer in d["layers"]] == [0]
+    assert "ffn_view" not in d["layers"][0]
+
+
+def test_trace_with_hidden_and_other_layers(client):
+    d = client.post("/api/trace", json={"text": "To be or", "layers": [3, 5], "include_hidden": True}).json()
+    assert [layer["index"] for layer in d["layers"]] == [3, 5]
+    assert "ffn_view" in d["layers"][0]
+
+
+@pytest.mark.parametrize("body", [
+    {"text": "hi", "layers": [6]},
+    {"text": "hi", "layers": [-1]},
+    {"text": "hi", "max_tokens": 0},
+    {"text": "hi", "max_tokens": 33},
+    {"text": "x" * 501},
+    {},
+])
+def test_trace_rejects_bad_input(client, body):
+    assert client.post("/api/trace", json=body).status_code == 422
+
+
+def test_trace_of_unknown_characters_still_works(client):
+    d = client.post("/api/trace", json={"text": "éé"}).json()
+    assert d["tokens"] == ["\n"]
+
+
+def test_generate_returns_the_requested_length(client):
+    d = client.post("/api/generate", json={"text": "ROMEO:", "max_new_tokens": 25}).json()
+    assert d["prompt"] == "ROMEO:" and len(d["continuation"]) == 25
+    assert all(c in gpt.chars for c in d["continuation"])
+
+
+def test_generate_works_without_a_prompt(client):
+    assert len(client.post("/api/generate", json={"max_new_tokens": 5}).json()["continuation"]) == 5
+
+
+def test_generate_is_repeatable_with_the_same_seed(client):
+    body = {"text": "HAMLET:", "max_new_tokens": 30, "temperature": 0.8}
+    torch.manual_seed(7)
+    a = client.post("/api/generate", json=body).json()["continuation"]
+    torch.manual_seed(7)
+    b = client.post("/api/generate", json=body).json()["continuation"]
+    assert a == b
+
+
+@pytest.mark.parametrize("body", [
+    {"text": "a", "temperature": 0.05},
+    {"text": "a", "temperature": 2.5},
+    {"text": "a", "max_new_tokens": 0},
+    {"text": "a", "max_new_tokens": 501},
+])
+def test_generate_rejects_bad_input(client, body):
+    assert client.post("/api/generate", json=body).status_code == 422
+
+
+def test_generate_stream_sends_one_event_per_character(client):
+    r = client.post("/api/generate/stream", json={"text": "ROMEO:", "max_new_tokens": 6})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    events = [e for e in r.text.split("\n\n") if e]
+    assert events[-1] == "data: [DONE]"
+    chars = [json.loads(e[len("data: "):]) for e in events[:-1]]
+    assert len(chars) == 6 and all(c in gpt.chars for c in chars)
+
+
+def test_endpoints_return_503_without_a_trained_model(client, monkeypatch):
+    monkeypatch.setattr(A, "MODEL", None)
+    assert client.get("/api/health").json()["ok"] is False
+    assert client.get("/api/vocab").status_code == 200
+    assert client.post("/api/trace", json={"text": "hi"}).status_code == 503
+    assert client.post("/api/generate", json={"text": "hi"}).status_code == 503
+    assert client.get("/api/token-table").status_code == 503
+
+
+def test_website_is_served(client):
+    page = client.get("/")
+    assert page.status_code == 200 and "GPT Anatomy" in page.text
+    assert client.get("/app.js").status_code == 200
+    assert client.get("/fonts/Humor-Sans.ttf").status_code == 200
+
+
+@pytest.mark.skipif(not (M.ROOT and __import__("os").path.exists(M.ROOT + "/gpt.pt")), reason="trained gpt.pt not found")
+def test_trained_weights_know_shakespeare():
+    """A random model scores about 4.2 here. The trained one should be far lower."""
+    trained = M.load_model()
+    ids = torch.tensor([M.to_ids("First Citizen:\nBefore we proceed any further, hear me speak.")])
+    with torch.no_grad():
+        _, loss = trained(ids[:, :-1], ids[:, 1:])
+    assert loss.item() < 2.5
