@@ -15,7 +15,7 @@ app = FastAPI(title="My-GPT API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 MODEL = None
-if os.path.exists(os.path.join(M.ROOT, 'gpt.pt')):
+if os.path.exists(os.path.join(M.AI_DIR, 'gpt.pt')):
     MODEL = M.load_model()
 
 

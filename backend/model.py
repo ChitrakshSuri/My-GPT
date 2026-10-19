@@ -5,9 +5,10 @@ import threading
 import torch
 from torch.nn import functional as F
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
-os.chdir(ROOT)  # gpt.py reads vocab.json from the current folder
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # the repo folder
+AI_DIR = os.path.join(ROOT, 'ai')  # gpt.py, gpt.pt and vocab.json live here
+sys.path.insert(0, AI_DIR)
+os.chdir(AI_DIR)  # gpt.py reads vocab.json from the current folder
 
 import gpt  # noqa: E402  (importing it does not start training)
 
@@ -17,7 +18,7 @@ LOCK = threading.Lock()
 
 def load_model():
     model = gpt.GPTLanguageModel()
-    state = torch.load(os.path.join(ROOT, 'gpt.pt'), map_location='cpu')
+    state = torch.load(os.path.join(AI_DIR, 'gpt.pt'), map_location='cpu')
     model.load_state_dict(state)
     model.eval()
     return model

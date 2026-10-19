@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 import torch
@@ -112,7 +113,7 @@ def test_website_is_served(client):
     assert client.get("/fonts/Humor-Sans.ttf").status_code == 200
 
 
-@pytest.mark.skipif(not (M.ROOT and __import__("os").path.exists(M.ROOT + "/gpt.pt")), reason="trained gpt.pt not found")
+@pytest.mark.skipif(not os.path.exists(os.path.join(M.AI_DIR, "gpt.pt")), reason="trained gpt.pt not found")
 def test_trained_weights_know_shakespeare():
     """A random model scores about 4.2 here. The trained one should be far lower."""
     trained = M.load_model()
