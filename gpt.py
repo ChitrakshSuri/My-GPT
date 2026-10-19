@@ -1,3 +1,5 @@
+import json
+import os
 import time
 import torch
 import torch.nn as nn
@@ -21,11 +23,14 @@ dropout = 0.2
 torch.manual_seed(1337)
 
 # wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
-with open('input.txt', 'r', encoding='utf-8') as f:
-    text = f.read()
-
-# here are all the unique characters that occur in this text
-chars = sorted(list(set(text)))
+# the characters are saved to vocab.json when training, so the model can be loaded without input.txt
+if os.path.exists('vocab.json'):
+    with open('vocab.json', 'r', encoding='utf-8') as f:
+        chars = json.load(f)
+else:
+    # here are all the unique characters that occur in the text
+    with open('input.txt', 'r', encoding='utf-8') as f:
+        chars = sorted(list(set(f.read())))
 vocab_size = len(chars)
 # create a mapping from characters to integers
 stoi = { ch:i for i,ch in enumerate(chars) }
@@ -193,6 +198,11 @@ class GPTLanguageModel(nn.Module):
         return idx
 
 if __name__ == '__main__':
+    with open('input.txt', 'r', encoding='utf-8') as f:
+        text = f.read()
+    with open('vocab.json', 'w', encoding='utf-8') as f:
+        json.dump(chars, f)
+
     # Train and test splits
     data = torch.tensor(encode(text), dtype=torch.long)
     n = int(0.9*len(data)) # first 90% will be train, rest val
