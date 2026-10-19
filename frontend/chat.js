@@ -30,6 +30,7 @@ let busy=false;
 async function send(text){
   if(busy)return;busy=true;$('#csend').disabled=true;
   bubble('me',esc(text));
+  window.gptApp.applyText(text);   // the 3D views show what you just typed
   const out=bubble('bot','<span class="gen"></span>');
   const gen=out.querySelector('.gen');let full='';
   try{
@@ -57,7 +58,6 @@ async function send(text){
   busy=false;$('#csend').disabled=false;msgs.scrollTop=msgs.scrollHeight;
 }
 async function visualize(full){
-  $('#prompt').value=full;
   showTab('info');
   await window.gptApp.applyText(full);
   window.gptApp.go('attn');

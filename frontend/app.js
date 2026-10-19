@@ -494,12 +494,11 @@ cvs.addEventListener('pointerup',e=>{
 /* ---------- ui events ---------- */
 async function sampleNext(){
   const p=softmax(R.logits[T-1],S.temp);let r=Math.random(),k=0;for(;k<p.length-1;k++){r-=p[k];if(r<=0)break}
-  const nt=S.valid+CHARS[k];$('#prompt').value=nt;await applyText(nt);
+  await applyText(S.valid+CHARS[k]);
 }
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-ex],[data-cam],[data-home],[data-part],[data-open],[data-head],[data-sel],[data-resid],[data-layer],#sample,#spin,#retry');if(!t)return;
-  if(t.id==='retry'){applyText($('#prompt').value)}
-  else if(t.dataset.ex){$('#prompt').value=t.dataset.ex;applyText(t.dataset.ex)}
+  const t=e.target.closest('[data-cam],[data-home],[data-part],[data-open],[data-head],[data-sel],[data-resid],[data-layer],#sample,#spin,#retry');if(!t)return;
+  if(t.id==='retry'){applyText(S.valid)}
   else if(t.dataset.cam){
     const L=controls.target.clone(),d=viewDist,c=t.dataset.cam;
     const pos=c==='front'?[L.x,L.y,L.z+d]:c==='side'?[L.x+d,L.y,L.z]:c==='top'?[L.x,L.y+d,L.z+.01]:null;
@@ -532,8 +531,6 @@ document.addEventListener('mouseout',e=>{
   const c=e.target.closest('.mat');
   if(c&&!c.contains(e.relatedTarget)&&S.scene==='attn'){S.hov=null;drawAttnEdges();teachScene()}
 });
-let typing=null;
-$('#prompt').addEventListener('input',()=>{clearTimeout(typing);typing=setTimeout(()=>applyText($('#prompt').value,false),300)});
 
 /* ---------- loop and start ---------- */
 function frame(){
@@ -551,7 +548,7 @@ async function start(){
     const [vocab,health,table]=await Promise.all([api('/api/vocab'),api('/api/health'),api('/api/token-table?dims='+D),fonts]);
     CHARS=vocab.chars;PARAMS=health.parameters;TOKTABLE=table.rows;
   }catch(e){showError(e);return}
-  const ok=await applyText($('#prompt').value);
+  const ok=await applyText('To be or');   // the text shown until the first chat message
   if(ok){camera.position.copy(camGoal.pos);controls.target.copy(camGoal.look)}
   frame();
 }

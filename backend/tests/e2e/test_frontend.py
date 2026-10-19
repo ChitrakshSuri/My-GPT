@@ -12,6 +12,24 @@ def open_page(page, scene="overview"):
     expect(page.locator(".node")).to_have_count(13)   # the flow chart appears once the model has answered
 
 
+def fake_stream(page):
+    """Answer chat requests instantly with one letter, so tests that only look at the page stay fast."""
+    page.route("**/api/generate/stream", lambda route: route.fulfill(
+        status=200, content_type="text/event-stream", body='data: "x"\n\ndata: [DONE]\n\n'))
+
+
+def say(page, text):
+    """Type a message in the chat and send it."""
+    page.locator('[data-tab="chat"]').click()
+    expect(page.locator("#csend")).to_be_enabled()
+    page.fill("#cin", text)
+    page.press("#cin", "Enter")
+
+
+def typed_text(page):
+    return page.evaluate("gptApp.state.valid")
+
+
 def canvas_has_a_drawing(page):
     page.wait_for_timeout(1500)                        # let the camera settle
     return len(page.locator("#gl").screenshot()) > 12000   # a blank white canvas is only a few KB
@@ -62,35 +80,30 @@ def test_head_and_block_selectors(page):
     expect(page.locator("#info")).to_contain_text("block 4")
 
 
-def test_message_box_updates_the_flow_chart(page):
+def test_chat_message_updates_the_visualizer(page):
+    fake_stream(page)
     open_page(page)
-    page.fill("#prompt", "ROMEO:")
+    say(page, "ROMEO:")
     expect(page.locator('.node[data-part="text"] .tx')).to_contain_text("ROMEO:")
 
 
-def test_message_box_explains_skipped_and_cropped_text(page):
+def test_chat_explains_skipped_and_cropped_text(page):
+    fake_stream(page)
     open_page(page)
-    page.fill("#prompt", "héllo")
+    say(page, "h\u00e9llo")
     expect(page.locator("#pstat")).to_contain_text("Skipped")
-    page.fill("#prompt", "To be or not to be, that is")
+    say(page, "To be or not to be, that is")
     expect(page.locator("#pstat")).to_contain_text("last 12 of 27")
-    page.fill("#prompt", "é")
+    say(page, "\u00e9")
     expect(page.locator("#pstat")).to_contain_text("at least 2")
-
-
-def test_example_buttons_fill_the_message_box(page):
-    open_page(page)
-    page.locator('[data-ex="First Citizen:"]').click()
-    expect(page.locator("#prompt")).to_have_value("First Citizen:")
-    expect(page.locator('.node[data-part="text"] .tx')).to_contain_text("Citizen")
 
 
 def test_output_scene_can_pick_the_next_letter(page):
     open_page(page, "output")
-    before = page.input_value("#prompt")
+    before = typed_text(page)
     page.locator("#sample").click()
-    expect(page.locator("#prompt")).not_to_have_value(before)
-    assert len(page.input_value("#prompt")) == len(before) + 1
+    page.wait_for_function("(n) => gptApp.state.valid.length === n + 1", arg=len(before))
+    assert typed_text(page).startswith(before)
 
 
 def test_chat_streams_a_reply_and_visualizes_it(page):
@@ -105,18 +118,19 @@ def test_chat_streams_a_reply_and_visualizes_it(page):
     page.locator(".bub .tools button").click()
     expect(page.locator("#crumbs")).to_contain_text("Attention")
     expect(page.locator("#info")).to_be_visible()
-    assert page.input_value("#prompt") == "ROMEO:" + reply
+    assert typed_text(page) == "ROMEO:" + reply
 
 
 def test_error_banner_and_retry_when_the_model_is_unreachable(page):
     open_page(page)
     page.route("**/api/trace", lambda route: route.abort())
-    page.fill("#prompt", "Hello there")
+    page.evaluate("gptApp.applyText('Hello there')")
     expect(page.locator("#err")).to_have_class("err on")
     expect(page.locator("#err")).to_contain_text("Can")
     page.unroute("**/api/trace")
     page.locator("#retry").click()
     expect(page.locator("#err")).not_to_have_class("err on")
+    expect(page.locator('.node[data-part="text"] .tx')).to_contain_text("Hello")
 
 
 def test_signature_links(page):
