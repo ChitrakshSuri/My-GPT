@@ -84,6 +84,7 @@ class Head(nn.Module):
         wei = q @ k.transpose(-2,-1) * k.shape[-1]**-0.5 # (B, T, hs) @ (B, hs, T) -> (B, T, T)
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf')) # (B, T, T)
         wei = F.softmax(wei, dim=-1) # (B, T, T)
+        self.last_wei = wei.detach() # keep the attention weights so they can be visualized
         wei = self.dropout(wei)
         # perform the weighted aggregation of the values
         v = self.value(x) # (B,T,hs)
