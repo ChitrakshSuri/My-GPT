@@ -6,9 +6,15 @@ import model as M
 gpt = M.gpt
 
 
+def _round(x, digits):
+    if isinstance(x, list):
+        return [_round(v, digits) for v in x]
+    return round(x, digits)
+
+
 def _t(x, digits=3):
-    # tensor -> nested lists, rounded so the JSON stays small
-    return x.round(decimals=digits).tolist()
+    # tensor -> nested lists, rounded in Python (float32 values print with many extra digits otherwise)
+    return _round(x.tolist(), digits)
 
 
 @torch.no_grad()
