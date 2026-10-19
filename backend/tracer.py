@@ -6,17 +6,19 @@ import model as M
 gpt = M.gpt
 
 
-def _t(x, digits=4):
+def _t(x, digits=3):
     # tensor -> nested lists, rounded so the JSON stays small
     return x.round(decimals=digits).tolist()
 
 
 @torch.no_grad()
-def trace(model, text, max_tokens=12):
+def trace(model, text, max_tokens=12, layers=(0,), include_hidden=False):
     """Run the model once and return every intermediate value the visualizer draws.
 
     Forward hooks copy the output of each module while the normal forward pass runs,
-    so gpt.py itself stays untouched (except Head.last_wei for the attention weights)."""
+    so gpt.py itself stays untouched (except Head.last_wei for the attention weights).
+    Every layer is computed, but only the requested layers are returned (the JSON would be huge otherwise).
+    The wide feed-forward layer (T x 1536 per layer) is only returned when include_hidden is True."""
     ids = M.to_ids(text)[-max_tokens:]
     if not ids:
         ids = [0]
@@ -38,7 +40,6 @@ def trace(model, text, max_tokens=12):
         watch(block.ln1, f'{i}.ln1')
         watch(block.sa, f'{i}.sa')
         watch(block.ln2, f'{i}.ln2')
-        watch(block.ffwd.net[0], f'{i}.hidden_pre')
         watch(block.ffwd.net[1], f'{i}.hidden')
         watch(block.ffwd, f'{i}.ffn')
         watch(block, f'{i}.out')
@@ -52,7 +53,7 @@ def trace(model, text, max_tokens=12):
         for h in hooks:
             h.remove()
 
-    layers = []
+    out_layers = []
     x_in = cap['tok'] + cap['pos']  # input to the first block
     for i, block in enumerate(model.blocks):
         heads = []
@@ -63,13 +64,15 @@ def trace(model, text, max_tokens=12):
             heads.append({'q': _t(q), 'k': _t(k), 'v': _t(v), 'scores': _t(scores),
                           'weights': _t(weights), 'out': _t(weights @ v)})
         x_attn = x_in + cap[f'{i}.sa']                      # residual 1
-        layers.append({
-            'in': _t(x_in), 'ln1': _t(cap[f'{i}.ln1']), 'heads': heads,
-            'attn': _t(cap[f'{i}.sa']), 'after_attn': _t(x_attn),
-            'ln2': _t(cap[f'{i}.ln2']), 'hidden_pre': _t(cap[f'{i}.hidden_pre']),
-            'hidden': _t(cap[f'{i}.hidden']), 'ffn': _t(cap[f'{i}.ffn']),
-            'out': _t(cap[f'{i}.out']),
-        })
+        if i in layers:
+            layer = {
+                'index': i, 'in': _t(x_in), 'ln1': _t(cap[f'{i}.ln1']), 'heads': heads,
+                'attn': _t(cap[f'{i}.sa']), 'after_attn': _t(x_attn),
+                'ln2': _t(cap[f'{i}.ln2']), 'ffn': _t(cap[f'{i}.ffn']), 'out': _t(cap[f'{i}.out']),
+            }
+            if include_hidden:
+                layer['hidden'] = _t(cap[f'{i}.hidden'])  # after ReLU
+            out_layers.append(layer)
         x_in = cap[f'{i}.out']
 
     probs = F.softmax(cap['logits'][-1], dim=-1)
@@ -80,6 +83,6 @@ def trace(model, text, max_tokens=12):
                    'vocab_size': gpt.vocab_size},
         'embeddings': {'token': _t(cap['tok']), 'position': _t(cap['pos']),
                        'sum': _t(cap['tok'] + cap['pos'])},
-        'layers': layers,
+        'layers': out_layers,
         'final': {'ln_f': _t(cap['ln_f']), 'logits': _t(cap['logits']), 'probs': _t(probs, 5)},
     }
