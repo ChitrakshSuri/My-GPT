@@ -4,6 +4,7 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import model as M
@@ -92,3 +93,7 @@ def generate_stream(req: GenerateRequest):
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(events(), media_type="text/event-stream")
+
+
+# the website: must come last, so the /api routes above are matched first
+app.mount("/", StaticFiles(directory=os.path.join(M.ROOT, "frontend"), html=True), name="frontend")
