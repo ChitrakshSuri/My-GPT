@@ -238,6 +238,9 @@ if __name__ == '__main__':
 
         progress.set_postfix(loss=f"{loss.item():.4f}")
 
+    # save the trained weights so the model can be used without training again
+    torch.save(model.state_dict(), 'gpt.pt')
+
     # generate from the model
     m.eval()
     context = torch.zeros((1, 1), dtype=torch.long, device=device)
