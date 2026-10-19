@@ -49,29 +49,25 @@ uv run pytest backend/tests                # unit and API tests, about 15 second
 uv run pytest backend/tests -m e2e         # browser tests with Playwright, about 2 minutes, needs Chrome
 ```
 
-## Deploy to Hugging Face Spaces (free CPU)
+## Deploy to Google Cloud Run
 
-The `Dockerfile` builds one container that serves the website and the API on port 7860. The 52 MB `gpt.pt` is not in
-the `main` branch, so the Space gets it from a separate branch through Git LFS:
+The `Dockerfile` builds one container that serves the website and the API. Cloud Run runs it, scales it to zero when
+nobody visits, and has a monthly free allowance (check Google's pricing page for the current numbers).
+Hugging Face Docker Spaces are no longer free for new accounts, so they are not used here.
+
+You need a Google Cloud project with billing turned on. Add a budget alert in the Billing page so a mistake cannot
+become a surprise bill. Then, from this folder on your own machine (the upload must include `ai/gpt.pt`, which is not in git):
 
 ```bash
-# once: create a Space on huggingface.co with the Docker SDK (blank template), and install git-lfs
-git checkout -b space
-git lfs install && git lfs track "ai/gpt.pt"
-git add -f ai/gpt.pt .gitattributes
-# put this at the very top of README.md on this branch:
-#   ---
-#   title: GPT Anatomy
-#   sdk: docker
-#   app_port: 7860
-#   ---
-git commit -am "Deploy to Hugging Face Spaces"
-git remote add space https://huggingface.co/spaces/<your-username>/<space-name>
-git push space space:main
-git checkout main
+gcloud auth login
+gcloud config set project <your-project-id>
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
+gcloud run deploy gpt-anatomy --source . --region us-central1 --port 7860 \
+  --cpu 1 --memory 1Gi --min-instances 0 --max-instances 1 --cpu-boost --allow-unauthenticated
 ```
 
-Free Spaces go to sleep when nobody visits, so the first request after a break can take a minute.
+It prints the public URL when it finishes. The first visit after a quiet period is slower while the container starts.
+To take it down: `gcloud run services delete gpt-anatomy --region us-central1`.
 
 ## API
 
