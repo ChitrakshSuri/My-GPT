@@ -1,0 +1,5 @@
+services:
+  gpt:
+    build: .
+    volumes:
+      - .:/app
