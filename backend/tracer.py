@@ -17,6 +17,18 @@ def _t(x, digits=3):
     return _round(x.tolist(), digits)
 
 
+def ffn_view(block, ln2, hidden, n_show=64, d_show=16):
+    """A small slice of the feed-forward layer for drawing: the first 16 input numbers,
+    the first 64 of the 1536 hidden neurons and the first 16 output numbers.
+    w1 and w2 say how strongly each number pushes the next layer (before the bias)."""
+    W1 = block.ffwd.net[0].weight  # (1536, 384)
+    W2 = block.ffwd.net[2].weight  # (384, 1536)
+    w1 = ln2[:, :d_show, None] * W1[:n_show, :d_show].T[None]      # (T, 16, 64)
+    w2 = hidden[:, :n_show, None] * W2[:d_show, :n_show].T[None]   # (T, 64, 16)
+    return {'hidden': _t(hidden[:, :n_show]), 'active': (hidden > 0).sum(1).tolist(),
+            'total': hidden.shape[1], 'w1': _t(w1, 4), 'w2': _t(w2, 4)}
+
+
 @torch.no_grad()
 def trace(model, text, max_tokens=12, layers=(0,), include_hidden=False):
     """Run the model once and return every intermediate value the visualizer draws.
@@ -24,7 +36,7 @@ def trace(model, text, max_tokens=12, layers=(0,), include_hidden=False):
     Forward hooks copy the output of each module while the normal forward pass runs,
     so gpt.py itself stays untouched (except Head.last_wei for the attention weights).
     Every layer is computed, but only the requested layers are returned (the JSON would be huge otherwise).
-    The wide feed-forward layer (T x 1536 per layer) is only returned when include_hidden is True."""
+    The feed-forward slice for drawing (ffn_view) is only returned when include_hidden is True."""
     ids = M.to_ids(text)[-max_tokens:]
     if not ids:
         ids = [0]
@@ -77,7 +89,7 @@ def trace(model, text, max_tokens=12, layers=(0,), include_hidden=False):
                 'ln2': _t(cap[f'{i}.ln2']), 'ffn': _t(cap[f'{i}.ffn']), 'out': _t(cap[f'{i}.out']),
             }
             if include_hidden:
-                layer['hidden'] = _t(cap[f'{i}.hidden'])  # after ReLU
+                layer['ffn_view'] = ffn_view(block, cap[f'{i}.ln2'], cap[f'{i}.hidden'])
             out_layers.append(layer)
         x_in = cap[f'{i}.out']
 
