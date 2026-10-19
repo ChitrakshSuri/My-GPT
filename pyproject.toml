@@ -1,0 +1,29 @@
+[project]
+name = "my-gpt"
+version = "0.1.0"
+description = "A character-level GPT trained on tiny Shakespeare, with a 3D website that shows what happens inside it"
+requires-python = ">=3.10"
+# what the website needs to run (gpt.py imports tqdm for its progress bars)
+dependencies = [
+    "torch",
+    "tqdm",
+    "fastapi",
+    "uvicorn",
+]
+
+[dependency-groups]
+# only for tests: uv installs this group by default when you run `uv sync`
+dev = [
+    "pytest",
+    "httpx",
+    "playwright",
+]
+
+# CPU-only PyTorch on Linux and Windows: the model is small and the CUDA build is several GB
+[tool.uv.sources]
+torch = { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
