@@ -8,6 +8,8 @@ The commit history follows the order of the lecture.
 
 The model is a **text completer**, not a chatbot: give it the start of a line and it continues it in Shakespeare's style.
 
+![GPT Anatomy: a 3D view of the model with a flow chart above and an explanation panel on the right](image.png)
+
 ## Layout
 
 ```
