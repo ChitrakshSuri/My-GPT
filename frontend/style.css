@@ -29,7 +29,6 @@ button{cursor:pointer}
 .top h1{margin:0;font-size:28px;line-height:1}
 .top h1 small{font-family:var(--hand);font-variant:normal;font-weight:400;font-size:17px;color:var(--muted);margin-left:10px}
 .prompt{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin-left:auto;flex:1;min-width:280px;max-width:820px}
-.prompt label{font-size:16px;color:var(--muted)}
 .prompt textarea{font-family:var(--hand);font-size:19px;line-height:1.25;border:1px solid var(--line);border-radius:4px;padding:2px 10px;background:#fff;flex:1;min-width:180px;resize:vertical}
 .prompt .ex{display:flex;gap:6px;flex-wrap:wrap}
 .prompt .ex .btn{font-size:14px;padding:1px 8px}
