@@ -117,3 +117,11 @@ def test_error_banner_and_retry_when_the_model_is_unreachable(page):
     page.unroute("**/api/trace")
     page.locator("#retry").click()
     expect(page.locator("#err")).not_to_have_class("err on")
+
+
+def test_signature_links(page):
+    open_page(page)
+    sig = page.locator(".sig")
+    expect(sig).to_contain_text("Chitraksh Suri")
+    expect(sig.get_by_role("link", name="LinkedIn")).to_have_attribute("href", "https://linkedin.com/in/chitrakshsuri")
+    expect(sig.get_by_role("link", name="GitHub")).to_have_attribute("href", "https://github.com/ChitrakshSuri")

@@ -34,6 +34,9 @@ button{cursor:pointer}
 .prompt .ex .btn{font-size:14px;padding:1px 8px}
 .pstat{flex-basis:100%;font-size:14px;color:var(--muted)}
 .pstat:empty{display:none}
+.sig{display:flex;align-items:baseline;gap:4px 12px;flex-wrap:wrap;font-size:17px;color:var(--muted)}
+.sig b{color:var(--ink);font-size:18px}
+.sig a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
 /* flow chart */
 .flowwrap{padding:12px 16px 10px;overflow-x:auto}
 .flowhd{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
