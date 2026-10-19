@@ -1,0 +1,9 @@
+.git
+venv
+.venv
+__pycache__
+*.pyc
+ai/input.txt
+ai/bigram.py
+ai/train_colab.ipynb
+backend/tests

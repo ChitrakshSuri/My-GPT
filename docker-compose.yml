@@ -1,5 +1,6 @@
+# run the whole site locally in one container: docker compose up --build  ->  http://localhost:7860
 services:
-  gpt:
+  web:
     build: .
-    volumes:
-      - .:/app
+    ports:
+      - "7860:7860"
