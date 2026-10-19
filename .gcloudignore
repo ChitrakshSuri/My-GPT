@@ -1,0 +1,12 @@
+# What `gcloud run deploy --source .` uploads. Because this file exists, gcloud ignores .gitignore,
+# so ai/gpt.pt (git-ignored, 52 MB) IS uploaded, which the Dockerfile needs.
+.git
+venv/
+.venv/
+__pycache__/
+*.pyc
+backend/tests/
+ai/input.txt
+ai/bigram.py
+ai/train_colab.ipynb
+image.png
