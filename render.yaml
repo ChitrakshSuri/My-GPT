@@ -1,0 +1,9 @@
+# Render Blueprint: New -> Blueprint -> pick this repo. It builds the Dockerfile from the `deploy` branch,
+# which is `main` plus the model weights (ai/gpt.pt is git-ignored, so it only exists on that branch).
+services:
+  - type: web
+    name: gpt-anatomy
+    runtime: docker
+    plan: free
+    branch: deploy
+    healthCheckPath: /api/health

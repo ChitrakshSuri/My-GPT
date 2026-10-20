@@ -49,6 +49,21 @@ uv run pytest backend/tests                # unit and API tests, about 15 second
 uv run pytest backend/tests -m e2e         # browser tests with Playwright, about 2 minutes, needs Chrome
 ```
 
+## Deploy on Render (free, but slow)
+
+Render's free plan gives the container a small share of a CPU, so the 3D views load fine but a chat reply
+takes a while. It also goes to sleep after 15 minutes without visitors; waking it takes up to a minute.
+
+The weights `ai/gpt.pt` are git-ignored, so Render builds from a `deploy` branch that is `main` plus that file:
+
+```bash
+git checkout deploy && git merge main     # update the deploy branch after changes on main
+git push origin deploy && git checkout main
+```
+
+Then on https://render.com: sign in with GitHub, **New, Blueprint**, pick this repo, and apply. Render reads
+`render.yaml`, builds the `Dockerfile`, and gives you a public `onrender.com` URL.
+
 ## Deploy to Google Cloud Run
 
 The `Dockerfile` builds one container that serves the website and the API. Cloud Run runs it, scales it to zero when
