@@ -31,6 +31,7 @@ function showError(e){
 /* ---------- the data the scenes draw ---------- */
 const S={scene:'overview',head:0,layer:0,sel:null,hov:null,mask:true,explode:.35,resid:1,temp:1,hoverPart:null,valid:''};
 let tokens=[],R=null,T=0;
+S.live={ev:null,n:0,done:false,fitted:false};S.liveLayer=5;S.liveHead='avg';   // the live view: latest step, block and head being watched
 async function load(text){
   const id=++reqId;setBusy(true);
   try{
@@ -50,16 +51,30 @@ function adopt(d){
   if(S.sel===null||S.sel>=T)S.sel=T-1;
 }
 /* raw text from the message box -> the characters the model knows, shown in a window of the last MAXT */
-async function applyText(raw,fresh=true){
+/* remembers the usable characters, writes the note under the flow chart, and returns the window to show (or null) */
+function describeText(raw){
   const chars=[...raw],ok=chars.filter(c=>CHARS.includes(c)),bad=[...new Set(chars.filter(c=>!CHARS.includes(c)))];
   S.valid=ok.join('');
   const st=$('#pstat');
-  if(ok.length<2){st.textContent='Type at least 2 characters the model knows (letters, digits and basic punctuation).';return false}
+  if(ok.length<2){st.textContent='Type at least 2 characters the model knows (letters, digits and basic punctuation).';return null}
   st.textContent=(ok.length>MAXT?`Showing the last ${MAXT} of ${ok.length} characters, because a GPT only sees a limited window (block_size in gpt.py). `:'')+
     (bad.length?`Skipped, not in the 65-character vocabulary: ${bad.map(show).join(' ')}`:'');
-  const good=await load(ok.slice(-MAXT).join(''));
+  return ok.slice(-MAXT).join('');
+}
+async function applyText(raw,fresh=true){
+  const win=describeText(raw);
+  if(win===null)return false;
+  const good=await load(win);
   if(good){renderFlow();build(!fresh)}
   return good;
+}
+/* no network: only updates the note and the first flow chart box (the live view does not need a trace) */
+function previewText(raw){
+  const win=describeText(raw);
+  if(win===null)return false;
+  const n=document.querySelector('.node[data-part="text"] .tx');
+  if(n)n.textContent='“'+[...win].map(show).join('')+'”';
+  return true;
 }
 
 /* ---------- what each part is (paraphrasing Karpathy's lecture) ---------- */
@@ -337,6 +352,48 @@ BUILD.output=()=>{
     <button class="btn" id="sample">Pick the next letter</button><span style="font-size:15px;color:#4d5666">Most likely: “${show(CHARS[top])}” (${(p[top]*100).toFixed(0)}%)</span></div>`;
 };
 
+/* live view: what the model does for each letter it writes */
+BUILD.live=()=>{
+  const g=root,L=S.live,ev=L.ev;
+  // the layout always has MAXT slots, so it never changes size while the reply grows and the camera stays framed
+  const ctx=ev?[...ev.ctx]:[...S.valid.slice(-MAXT)],n=ctx.length,sp=1.45,slot=i=>(MAXT-n+i)*sp;
+  const qx=(MAXT-1)*sp,qy=5;
+  ctx.forEach((c,i)=>{box(g,1.2,1.2,1.2,COL.tok,[slot(i),0,0],null);label(g,show(c),[slot(i),0,1],.9)});
+  label(g,'The last '+n+' letters it can see',[qx/2,-2.1,0],1);
+  ball(g,.55,COL.q,[qx,qy,0],null);label(g,'the newest letter asks',[qx,qy+1.2,0],.85,{font:'xkcd Script'});
+  let att=null;
+  if(ev){
+    const heads=ev.attn[S.liveLayer];
+    att=S.liveHead==='avg'?ctx.map((_,i)=>heads.reduce((s,h)=>s+h[i],0)/heads.length):heads[S.liveHead].slice();
+    att.forEach((w,i)=>{
+      edge(g,[qx,qy,0],[slot(i),.7,0],.03+.28*Math.sqrt(w),0xd33a3a,.35+.65*Math.min(1,w*3));
+      if(w>.1)label(g,Math.round(w*100)+'%',[slot(i),1.9,0],.8,{font:'xkcd Script',color:'#d33a3a'});
+    });
+  }
+  const bx=qx+4.5,gap=1.05,endB=bx+(NLAYER-1)*gap;
+  for(let b=0;b<NLAYER;b++)box(g,.6,6.5,3.4,b===S.liveLayer?0xf5d98a:COL.attn,[bx+b*gap,0,0],null);
+  label(g,'Block '+(S.liveLayer+1)+' of '+NLAYER+' is shown',[(bx+endB)/2,4.4,0],.9);label(g,'the model',[(bx+endB)/2,-4.3,0],1);
+  arrow(g,[qx+1.1,0,0],[bx-.8,0,0]);arrow(g,[endB+.8,0,0],[endB+3,0,0]);
+  const xb=endB+4,w=1.5;
+  if(ev){
+    ev.top.forEach(([c,p],k)=>{
+      const h=Math.max(.2,p*13),chosen=c===ev.c;
+      box(g,1,h,1,chosen?0xe0a800:COL.soft,[xb+k*w,h/2-3,0],null);
+      label(g,show(c),[xb+k*w,-3.9,0],1);
+      label(g,(p*100).toFixed(p<.1?1:0)+'%',[xb+k*w,h-2.1,0],.75,{font:'xkcd Script'});
+    });
+    label(g,'Most likely next letters',[xb+7*w/2,5.7,0],1);
+    label(g,'it drew “'+show(ev.c)+'” ('+(ev.p*100).toFixed(1)+'%)',[xb+7*w/2,-5.4,0],1);
+  }else label(g,'Waiting for the first letter…',[xb+3*w,0,0],1);
+  const xmin=-1.2,xmax=xb+7*w+1.2;
+  if(!L.fitted){L.fitted=true;fitCam([(xmin+xmax)/2,.6,0],(xmax-xmin)/2,7.6,[0,.12,1])}   // frame once, so later letters do not move the camera
+  const best=att?att.indexOf(Math.max(...att)):0,pc=v=>Math.round(v*100);
+  const cap=ev?`Letter ${L.n}: it looked hardest at “${show(ctx[best])}” (${pc(att[best])}%). Top choice “${show(ev.top[0][0])}” (${pc(ev.top[0][1])}%), drew “${show(ev.c)}”.${L.done?' Finished.':''}`:'Waiting for the first letter…';
+  return `<div class="grp"><span style="font-size:15px;color:#4d5666">Block</span>${Array.from({length:NLAYER},(_,i)=>`<button class="chipbtn" data-lblock="${i}" aria-pressed="${S.liveLayer===i}">${i+1}</button>`).join('')}</div>
+   <div class="grp"><span style="font-size:15px;color:#4d5666">Head</span><button class="chipbtn" data-lhead="avg" aria-pressed="${S.liveHead==='avg'}">avg</button>${Array.from({length:NH},(_,h)=>`<button class="chipbtn" data-lhead="${h}" aria-pressed="${S.liveHead===h}">${h+1}</button>`).join('')}</div>
+   <span style="font-size:15px;color:#4d5666">${cap}</span>`;
+};
+
 /* attention: the main dissection */
 let attnDyn=null,attnGeo=null;
 BUILD.attn=()=>{
@@ -409,6 +466,12 @@ function teachScene(){
       <h3>In your code</h3><div class="kv">gpt.py:85-91  wei = softmax(q@kᵀ) ; out = wei@v</div>${CREDIT}`;
     return;
   }
+  if(sc==='live'){
+    $('#info').innerHTML=`<h2 class="sc">Live view</h2><span class="tag" style="--bg:#f5d98a">one letter at a time</span>
+     <p>For every letter it writes, the model reads the text so far and guesses what comes next. Watch it work on the left while the reply streams in.</p>
+     <p>The row of cubes is the last 12 letters it can see. The <b>red lines</b> show how strongly the newest letter looked at each one, in the block and head you pick. The slabs are the ${NLAYER} blocks, and the gold one is the block you are watching. The bars on the right are the 8 most likely next letters, and the gold bar is the one it drew.</p>
+     <p>Along the top, the flow chart lights up box by box each time a letter is made.</p>${CREDIT}`;return;
+  }
   teachPart({embed:'embed',norm:'norm1',resid:'add'+S.resid,ffn:'ffn',output:'softmax'}[sc]);
 }
 
@@ -442,11 +505,11 @@ function build(keepCam,keepCtl){
   clearRoot();attnDyn=null;
   const ctl=BUILD[S.scene]();
   if(!keepCtl){$('#ctl').innerHTML=ctl;$('#ctl').style.display=ctl?'flex':'none'}
-  const nm={overview:null,embed:'Embeddings',norm:'Layer norm',attn:'Attention',resid:'Add',ffn:'Feed forward',output:'Output'}[S.scene];
+  const nm={overview:null,embed:'Embeddings',norm:'Layer norm',attn:'Attention',resid:'Add',ffn:'Feed forward',output:'Output',live:'Live view'}[S.scene];
   $('#crumbs').innerHTML=S.scene==='overview'?'<span>The whole GPT</span>':`<button class="btn" data-home="1">← The whole GPT</button><span class="sep">›</span><span>${nm}</span>`;
   $('#hintbar').style.display=S.scene==='overview'?'':'none';
   teachScene();markFlow();
-  if(keepCam&&camGoal)tween=0;
+  if(keepCam&&camGoal&&S.scene!=='live')tween=0;   // the live view keeps its first camera move going
 }
 function go(scene,o={}){
   S.scene=scene;if(o.head!==undefined)S.head=o.head;S.hov=null;
@@ -497,7 +560,7 @@ async function sampleNext(){
   await applyText(S.valid+CHARS[k]);
 }
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-cam],[data-home],[data-part],[data-open],[data-head],[data-sel],[data-resid],[data-layer],#sample,#spin,#retry');if(!t)return;
+  const t=e.target.closest('[data-cam],[data-home],[data-part],[data-open],[data-head],[data-sel],[data-resid],[data-layer],[data-lblock],[data-lhead],#sample,#spin,#retry');if(!t)return;
   if(t.id==='retry'){applyText(S.valid)}
   else if(t.dataset.cam){
     const L=controls.target.clone(),d=viewDist,c=t.dataset.cam;
@@ -511,6 +574,8 @@ document.addEventListener('click',e=>{
   else if(t.dataset.head!==undefined){S.head=+t.dataset.head;build(true)}
   else if(t.dataset.sel!==undefined){S.sel=+t.dataset.sel;build(true)}
   else if(t.dataset.resid){S.resid=+t.dataset.resid;build(true)}
+  else if(t.dataset.lblock!==undefined){S.liveLayer=+t.dataset.lblock;build(true)}
+  else if(t.dataset.lhead!==undefined){S.liveHead=t.dataset.lhead==='avg'?'avg':+t.dataset.lhead;build(true)}
   else if(t.dataset.layer!==undefined){setLayer(+t.dataset.layer)}
   else if(t.id==='sample'){sampleNext()}
 });
@@ -538,7 +603,22 @@ function frame(){
   if(camGoal&&tween>0){camera.position.lerp(camGoal.pos,.1);controls.target.lerp(camGoal.look,.1);tween--}
   controls.update();renderer.render(scene,camera);
 }
-window.gptApp={applyText,go,state:S};   // used by chat.js
+/* ---------- live view: watch the model work while it writes ---------- */
+const FLOW_ORDER=['text','tokens','embed','norm1','attn','add1','norm2','ffn','add2','normf','linear','softmax','next'];
+let sweeping=false;
+function sweep(){   // lights up the flow chart boxes one after another; a new letter waits for the sweep to finish
+  if(sweeping||(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches))return;
+  sweeping=true;
+  FLOW_ORDER.forEach((id,i)=>setTimeout(()=>{
+    const n=document.querySelector(`.node[data-part="${id}"]`);
+    if(n){n.classList.add('live');setTimeout(()=>n.classList.remove('live'),260)}
+    if(i===FLOW_ORDER.length-1)setTimeout(()=>{sweeping=false},260);
+  },i*70));
+}
+function liveStart(){S.live={ev:null,n:0,done:false,fitted:false};go('live')}
+function liveStep(ev){S.live.ev=ev;S.live.n++;sweep();if(S.scene==='live')build(true)}
+function liveEnd(){S.live.done=true;if(S.scene==='live')build(true)}
+window.gptApp={applyText,previewText,go,state:S,liveStart,liveStep,liveEnd};   // used by chat.js
 async function start(){
   const h0=(location.hash||'').slice(1);
   if(BUILD[h0])S.scene=h0;

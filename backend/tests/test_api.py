@@ -1,5 +1,6 @@
 import json
 import os
+import threading
 
 import pytest
 import torch
@@ -121,3 +122,66 @@ def test_trained_weights_know_shakespeare():
     with torch.no_grad():
         _, loss = trained(ids[:, :-1], ids[:, 1:])
     assert loss.item() < 2.5
+
+
+def test_live_stream_sends_what_the_live_view_draws(client):
+    r = client.post("/api/generate/stream", json={"text": "ROMEO:", "max_new_tokens": 4, "live": True})
+    events = [e for e in r.text.split("\n\n") if e]
+    assert events[-1] == "data: [DONE]"
+    steps = [json.loads(e[len("data: "):]) for e in events[:-1]]
+    assert len(steps) == 4
+    for step in steps:
+        assert step["c"] in gpt.chars and len(step["ctx"]) <= 12
+        assert len(step["top"]) == 8
+        probs = [p for _, p in step["top"]]
+        assert probs == sorted(probs, reverse=True) and sum(probs) <= 1.0001
+        assert 0 <= step["p"] <= 1
+        assert len(step["attn"]) == 6 and all(len(block) == 6 for block in step["attn"])
+        for block in step["attn"]:
+            for head in block:
+                assert len(head) == len(step["ctx"])      # one weight per letter shown
+                assert all(w >= 0 for w in head) and sum(head) <= 1.01   # rounding to 3 decimals can add a hair
+
+
+def test_live_context_grows_then_stops_at_twelve_letters(client):
+    r = client.post("/api/generate/stream", json={"text": "ab", "max_new_tokens": 14, "live": True})
+    steps = [json.loads(e[len("data: "):]) for e in r.text.split("\n\n") if e and e != "data: [DONE]"]
+    assert [len(s["ctx"]) for s in steps][:3] == [2, 3, 4]
+    assert len(steps[-1]["ctx"]) == 12
+
+
+def test_chance_of_the_drawn_letter_matches_the_candidate_list(client):
+    r = client.post("/api/generate/stream", json={"text": "ROMEO:", "max_new_tokens": 30, "live": True})
+    steps = [json.loads(e[len("data: "):]) for e in r.text.split("\n\n") if e and e != "data: [DONE]"]
+    listed = [s for s in steps if s["c"] in dict(s["top"])]
+    assert listed                                          # at least some draws land in the top 8
+    for s in listed:
+        assert dict(s["top"])[s["c"]] == s["p"]            # same probability in both places
+
+
+def test_the_lock_is_free_between_letters(model):
+    """If a stream kept the lock while waiting for the browser, one slow reply would block everybody else."""
+    events = A.generate_events(model, A.GenerateRequest(text="ROMEO:", max_new_tokens=3, live=True))
+    for _ in range(3):
+        next(events)
+        assert M.LOCK.acquire(blocking=False), "the stream is still holding the lock"
+        M.LOCK.release()
+
+
+def run_within(seconds, fn):
+    """Run fn in a thread and fail, instead of hanging the whole test run, if it is stuck waiting for the lock."""
+    out = {}
+    thread = threading.Thread(target=lambda: out.update(value=fn()), daemon=True)
+    thread.start()
+    thread.join(seconds)
+    assert not thread.is_alive(), "stuck waiting for the lock"
+    return out["value"]
+
+
+def test_other_requests_can_run_in_the_middle_of_a_reply(client, model):
+    events = A.generate_events(model, A.GenerateRequest(text="ROMEO:", max_new_tokens=4))
+    run_within(30, lambda: next(events))                                              # one letter, then the reply pauses
+    code = run_within(30, lambda: client.post("/api/trace", json={"text": "To be"}).status_code)
+    assert code == 200                                                                # a trace fits in between
+    assert client.get("/api/health").status_code == 200
+    assert len(list(events)) == 4                                                     # the reply carries on: 3 letters and [DONE]

@@ -11,6 +11,7 @@ $('#chat').innerHTML=`
   <div class="msgs" id="msgs"></div>
   <div class="sugg" id="sugg">${SUGGESTIONS.map(s=>`<button class="btn" data-sugg="${s}">${s}</button>`).join('')}</div>
   <label class="chatopt">Temperature <input type="range" id="ctemp" min="0.2" max="1.5" step="0.1" value="0.8"><b id="ctv">0.8</b></label>
+  <label class="chatopt"><input type="checkbox" id="watch" checked> Watch inside the model while it writes</label>
   <form class="composer" id="cform"><input id="cin" placeholder="Start a line…" maxlength="200" autocomplete="off" spellcheck="false"><button class="btn" id="csend">Send</button></form>`;
 
 const msgs=$('#msgs');
@@ -30,12 +31,14 @@ let busy=false;
 async function send(text){
   if(busy)return;busy=true;$('#csend').disabled=true;
   bubble('me',esc(text));
-  window.gptApp.applyText(text);   // the 3D views show what you just typed
+  const watch=$('#watch').checked;
+  if(watch){window.gptApp.previewText(text);window.gptApp.liveStart()}   // the left side shows the model working
+  else window.gptApp.applyText(text);                                      // or just the text you typed
   const out=bubble('bot','<span class="gen"></span>');
   const gen=out.querySelector('.gen');let full='';
   try{
     const res=await fetch(API+'/api/generate/stream',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({text,max_new_tokens:150,temperature:+$('#ctemp').value})});
+      body:JSON.stringify({text,max_new_tokens:150,temperature:+$('#ctemp').value,live:watch})});
     if(!res.ok)throw new Error('the model returned '+res.status);
     const reader=res.body.getReader(),dec=new TextDecoder();let buf='';
     for(;;){
@@ -45,14 +48,18 @@ async function send(text){
       while((i=buf.indexOf('\n\n'))>=0){
         const line=buf.slice(0,i).replace(/^data: /,'');buf=buf.slice(i+2);
         if(line==='[DONE]')continue;
-        full+=JSON.parse(line);gen.textContent=full;msgs.scrollTop=msgs.scrollHeight;
+        const ev=JSON.parse(line);
+        if(typeof ev==='string')full+=ev;else{full+=ev.c;window.gptApp.liveStep(ev)}
+        gen.textContent=full;msgs.scrollTop=msgs.scrollHeight;
       }
     }
     const tools=document.createElement('div');tools.className='tools';
     tools.innerHTML='<button class="btn">Visualize this</button>';
     tools.firstChild.onclick=()=>visualize(text+full);
     out.appendChild(tools);
+    if(watch)window.gptApp.liveEnd();
   }catch(e){
+    if(watch)window.gptApp.liveEnd();
     out.innerHTML='Can’t reach the model right now ('+esc(e.message)+'). Free hosting sleeps when idle, so give it a minute and try again.';
   }
   busy=false;$('#csend').disabled=false;msgs.scrollTop=msgs.scrollHeight;

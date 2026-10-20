@@ -44,6 +44,7 @@ button{cursor:pointer}
 .node .bd{position:absolute;inset:0;border:2px solid var(--ink);border-radius:8px;filter:url(#wob);background:var(--bg,#fff);transition:transform .12s}
 .node .tx{position:relative}
 .node:hover .bd,.node.hl .bd{transform:scale(1.07);box-shadow:3px 3px 0 var(--ink)}
+.node.live .bd{background:#ffe7a3;transform:scale(1.12);box-shadow:3px 3px 0 var(--accent);border-color:var(--accent)}
 .node.on .bd{border-width:3px;box-shadow:3px 3px 0 var(--accent);border-color:var(--accent)}
 .ar{width:16px;height:0;border-top:2px solid var(--ink);position:relative;flex:none;margin:0 2px}
 .ar::after{content:"";position:absolute;right:-1px;top:-6px;border-left:8px solid var(--ink);border-top:5px solid transparent;border-bottom:5px solid transparent}
