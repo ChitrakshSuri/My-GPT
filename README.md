@@ -115,34 +115,10 @@ uv run pytest backend/tests -m e2e         # 17 browser tests with Playwright, a
 
 ## Deploying
 
-The live site runs on **Render's free plan**, which gives the container only a small share of a CPU. The 3D views
-work, but a trace takes several seconds and a long chat reply takes a while.
-
-The weights `ai/gpt.pt` are git-ignored, so Render builds from a `deploy` branch that is `main` plus that file:
-
-```bash
-git checkout deploy && git merge main     # update the deploy branch after changes on main
-git push origin deploy && git checkout main
-```
-
-To set it up from scratch: on https://render.com choose **New, Blueprint**, pick this repo, and apply. Render reads
-`render.yaml`, builds the `Dockerfile`, and gives you a public URL.
-
-<details>
-<summary>Other host: Google Cloud Run (written but not tested here)</summary>
-
-Needs a Google Cloud project with billing turned on. Add a budget alert so a mistake cannot become a surprise bill.
-Run this from your own machine, because the upload must include `ai/gpt.pt`:
-
-```bash
-gcloud auth login
-gcloud config set project <your-project-id>
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
-gcloud run deploy gpt-anatomy --source . --region us-central1 --port 7860 \
-  --cpu 1 --memory 1Gi --min-instances 0 --max-instances 1 --cpu-boost --allow-unauthenticated
-```
-
-</details>
+The live site runs on Render's free plan, built from the `Dockerfile` and `render.yaml` in this repo. The free plan
+gives the container only a small share of a CPU, so the 3D views work but chat replies are slow. The trained weights
+are not stored on `main`; they live on a separate `deploy` branch, which is what Render builds.
+Step by step: [docs/deploying.md](docs/deploying.md).
 
 ## Limitations
 
