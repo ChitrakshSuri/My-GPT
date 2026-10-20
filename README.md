@@ -34,7 +34,8 @@ one step at a time.
   into the 3D views.
 - **Watch it write.** While a reply streams in, the left side shows the model working on every letter: the flow chart
   lights up box by box, the newest letter looks back at the letters before it (pick the block and head), and the eight
-  most likely next letters appear with the one it drew. Untick *Watch inside the model* in the Chat tab to turn it off.
+  most likely next letters appear with the one it drew. Pause it to study a letter, step back and forward one letter at a time, or replay the whole reply. Untick
+  *Watch inside the model* in the Chat tab to turn it off.
 
 ## How it works
 
@@ -105,7 +106,7 @@ Download `gpt.pt` and `vocab.json` into the `ai/` folder. To train locally inste
 
 ```bash
 uv run pytest backend/tests                # 43 unit and API tests, about 15 seconds, no trained weights needed
-uv run pytest backend/tests -m e2e         # 21 browser tests with Playwright, about 2 minutes, needs Chrome
+uv run pytest backend/tests -m e2e         # 23 browser tests with Playwright, about 2 minutes, needs Chrome
 ```
 
 ## API
