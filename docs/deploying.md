@@ -28,6 +28,30 @@ Render redeploys by itself when the `deploy` branch changes.
 3. Render reads `render.yaml`, builds the `Dockerfile` (the first build takes a few minutes), and gives you a public
    `onrender.com` URL.
 
+## Keeping the site awake (optional)
+
+The workflow `.github/workflows/keep-alive.yml` calls `/api/health` every 5 minutes, which counts as traffic, so the
+free instance does not spin down. Run it once by hand to check it: Actions tab, "Keep the site awake", **Run workflow**.
+
+Know what it costs:
+
+- **Free hours.** Render gives 750 free instance hours per month to the whole workspace, and a running service uses
+  them. An always-awake service uses about 720 to 744 hours, which leaves almost no margin. If the hours run out,
+  Render suspends all free services until the next month. Another free web service in the same workspace shares the 750.
+- **Render's attitude.** A Render staff member wrote in
+  [a community thread](https://community.render.com/t/will-using-cron-jobs-to-hit-free-tier-web-service-every-13-14-minutes-use-up-my-free-instance-hours/23630)
+  that deliberately keeping a free service awake goes against the spirit of the free tier. That is a forum answer, not a
+  formal rule, but keep it in mind.
+- **It is not perfect.** GitHub can run scheduled jobs late or skip some, and it disables scheduled workflows in a public
+  repo after 60 days without any repository activity. The site can still sleep now and then.
+
+To pause it, open the workflow in the Actions tab and choose **Disable workflow**. To keep the site awake for only part
+of the day, limit the hours in the `cron` line. For example `"2-59/5 2-18 * * *"` runs from 02:00 to 18:59 UTC, which
+is about 07:30 to 00:30 in India and uses roughly 500 hours a month.
+
+A free uptime monitor such as UptimeRobot, set to check the health URL every 5 minutes, does the same job and also
+emails you when the site is down.
+
 ## Free plan limits
 
 - The container gets only a small share of a CPU, so a trace takes several seconds and a long chat reply takes a while.
