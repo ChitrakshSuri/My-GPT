@@ -1,4 +1,4 @@
-# GPT Anatomy
+# GPT Anatomy: an interactive transformer visualization
 
 A small GPT built from scratch in PyTorch, plus a 3D website that opens it up so you can see what happens inside it,
 one step at a time.
