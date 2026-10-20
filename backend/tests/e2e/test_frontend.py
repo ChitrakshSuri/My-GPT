@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from playwright.sync_api import expect
 
@@ -139,3 +141,60 @@ def test_signature_links(page):
     expect(sig).to_contain_text("Chitraksh Suri")
     expect(sig.get_by_role("link", name="LinkedIn")).to_have_attribute("href", "https://linkedin.com/in/chitrakshsuri")
     expect(sig.get_by_role("link", name="GitHub")).to_have_attribute("href", "https://github.com/ChitrakshSuri")
+
+
+def fake_live_stream(page, letters="abc"):
+    """Answer chat requests with live steps shaped like the real ones, so the live view can be checked quickly."""
+    steps = [{"c": ch, "ctx": "ROMEO:", "p": 0.4,
+              "top": [[ch, 0.4], ["e", 0.2], ["o", 0.1], ["a", 0.08], ["i", 0.06], ["u", 0.05], ["n", 0.04], ["s", 0.03]],
+              "attn": [[[0.1, 0.05, 0.05, 0.1, 0.2, 0.5] for _ in range(6)] for _ in range(6)]} for ch in letters]
+    body = "".join(f"data: {json.dumps(s)}\n\n" for s in steps) + "data: [DONE]\n\n"
+    page.route("**/api/generate/stream", lambda route: route.fulfill(status=200, content_type="text/event-stream", body=body))
+
+
+def test_live_view_follows_a_reply(page):
+    fake_live_stream(page)
+    open_page(page)
+    say(page, "ROMEO:")
+    expect(page.locator("#crumbs")).to_contain_text("Live view")
+    expect(page.locator("#ctl")).to_contain_text("Letter 3")
+    expect(page.locator("#ctl")).to_contain_text("Finished")
+    expect(page.locator(".bub.bot .gen")).to_have_text("abc")
+    page.locator('[data-lblock="2"]').click()
+    expect(page.locator('[data-lblock="2"]')).to_have_attribute("aria-pressed", "true")
+    page.locator('[data-lhead="3"]').click()
+    expect(page.locator('[data-lhead="3"]')).to_have_attribute("aria-pressed", "true")
+    assert canvas_has_a_drawing(page)
+    assert page.errors == []
+
+
+def test_the_live_request_asks_for_live_steps(page):
+    fake_live_stream(page)
+    open_page(page)
+    page.locator('[data-tab="chat"]').click()
+    with page.expect_request(lambda r: r.url.endswith("/api/generate/stream")) as sent:
+        page.fill("#cin", "ROMEO:")
+        page.press("#cin", "Enter")
+    assert json.loads(sent.value.post_data)["live"] is True
+
+
+def test_watch_inside_can_be_turned_off(page):
+    fake_stream(page)
+    open_page(page)
+    page.locator('[data-tab="chat"]').click()
+    page.uncheck("#watch")
+    with page.expect_request(lambda r: r.url.endswith("/api/generate/stream")) as sent:
+        page.fill("#cin", "ROMEO:")
+        page.press("#cin", "Enter")
+    assert json.loads(sent.value.post_data)["live"] is False
+    expect(page.locator('.node[data-part="text"] .tx')).to_contain_text("ROMEO:")
+    assert page.evaluate("gptApp.state.scene") == "overview"
+
+
+def test_the_flow_chart_lights_up_for_each_letter(page):
+    fake_live_stream(page)
+    open_page(page)
+    page.evaluate("window.__lit = new Set(); new MutationObserver(() => document.querySelectorAll('.node.live').forEach(n => window.__lit.add(n.dataset.part))).observe(document.getElementById('flow'), {subtree: true, attributes: true, attributeFilter: ['class']})")
+    say(page, "ROMEO:")
+    page.wait_for_function("['tokens', 'attn', 'ffn', 'softmax'].every(id => window.__lit.has(id))", timeout=15000)
+    assert {"tokens", "attn", "ffn", "softmax"} <= set(page.evaluate("[...window.__lit]"))
