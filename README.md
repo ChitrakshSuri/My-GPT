@@ -6,7 +6,7 @@ one step at a time.
 **Live demo: https://gpt-anatomy.onrender.com**
 (free hosting: it sleeps when nobody visits, so the first load can take up to a minute, and chat replies are slow)
 
-![GPT Anatomy: a 3D view of the model with a flow chart above and an explanation panel on the right](image-2.png)
+![GPT Anatomy: a 3D view of the model with a flow chart above and an explanation panel on the right](image.png)
 
 ## What is this?
 
