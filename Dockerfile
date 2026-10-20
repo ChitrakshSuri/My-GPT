@@ -21,6 +21,11 @@ COPY --chown=user ai/gpt.py ai/vocab.json ai/gpt.pt ai/
 COPY --chown=user backend/*.py backend/
 COPY --chown=user frontend frontend
 
+# PyTorch starts one thread per CPU core it can see. On a host that gives the container only a small share of one
+# CPU (Render's free plan) those threads fight over the quota and everything crawls: in a local test with a 0.1 CPU
+# limit, one thread made chat about 8 times faster. On a big machine you can override it: docker run -e OMP_NUM_THREADS=8
+ENV OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+
 USER user
 EXPOSE 7860
 # hosts like Render and Cloud Run say which port to use through $PORT; 7860 is the default for local runs
