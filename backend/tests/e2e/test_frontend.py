@@ -198,3 +198,49 @@ def test_the_flow_chart_lights_up_for_each_letter(page):
     say(page, "ROMEO:")
     page.wait_for_function("['tokens', 'attn', 'ffn', 'softmax'].every(id => window.__lit.has(id))", timeout=15000)
     assert {"tokens", "attn", "ffn", "softmax"} <= set(page.evaluate("[...window.__lit]"))
+
+
+def live_toggle(page):
+    return page.locator('[data-live="toggle"]')
+
+
+def test_live_view_can_step_back_forward_and_replay(page):
+    fake_live_stream(page)
+    open_page(page)
+    say(page, "ROMEO:")
+    ctl = page.locator("#ctl")
+    expect(ctl).to_contain_text("Letter 3 of 3")
+    expect(live_toggle(page)).to_contain_text("Replay")             # the reply is finished and on its last letter
+    page.locator('[data-live="back"]').click()
+    expect(ctl).to_contain_text("Letter 2 of 3")
+    expect(live_toggle(page)).to_contain_text("Play")               # stepping pauses
+    page.locator('[data-live="back"]').click()
+    expect(ctl).to_contain_text("Letter 1 of 3")
+    expect(page.locator('[data-live="back"]')).to_be_disabled()     # nothing before the first letter
+    page.locator('[data-live="next"]').click()
+    expect(ctl).to_contain_text("Letter 2 of 3")
+    live_toggle(page).click()                                        # play on from here
+    expect(ctl).to_contain_text("Letter 3 of 3")
+    expect(live_toggle(page)).to_contain_text("Replay")
+    live_toggle(page).click()                                        # replay from the first letter
+    expect(ctl).to_contain_text("Letter 1 of 3")
+    expect(ctl).to_contain_text("Letter 3 of 3")
+    assert page.errors == []
+
+
+def test_pause_holds_the_view_while_the_reply_keeps_writing(page):
+    open_page(page)
+    page.locator('[data-tab="chat"]').click()
+    page.fill("#cin", "ROMEO:")
+    page.press("#cin", "Enter")
+    page.wait_for_function("gptApp.state.live.steps.length >= 3")
+    expect(live_toggle(page)).to_contain_text("Pause")
+    live_toggle(page).click()
+    held = page.evaluate("gptApp.state.live.shown")
+    page.wait_for_function("gptApp.state.live.done", timeout=120000)   # the reply carries on without the view
+    assert page.evaluate("gptApp.state.live.steps.length") == 150
+    assert page.evaluate("gptApp.state.live.shown") == held             # the view stayed where it was paused
+    expect(page.locator("#ctl")).to_contain_text(f"Letter {held + 1} of 150")
+    expect(live_toggle(page)).to_contain_text("Play")
+    live_toggle(page).click()
+    page.wait_for_function("(n) => gptApp.state.live.shown > n", arg=held)   # playing on from where it stopped

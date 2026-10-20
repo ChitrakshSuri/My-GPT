@@ -31,7 +31,8 @@ function showError(e){
 /* ---------- the data the scenes draw ---------- */
 const S={scene:'overview',head:0,layer:0,sel:null,hov:null,mask:true,explode:.35,resid:1,temp:1,hoverPart:null,valid:''};
 let tokens=[],R=null,T=0;
-S.live={ev:null,n:0,done:false,fitted:false};S.liveLayer=5;S.liveHead='avg';   // the live view: latest step, block and head being watched
+function newLive(){return{n:0,done:false,fitted:false,steps:[],shown:-1,playing:true,timer:null}}   // steps = every letter so far, shown = the one on screen
+S.live=newLive();S.liveLayer=5;S.liveHead='avg';   // the live view: latest step, block and head being watched
 async function load(text){
   const id=++reqId;setBusy(true);
   try{
@@ -354,7 +355,7 @@ BUILD.output=()=>{
 
 /* live view: what the model does for each letter it writes */
 BUILD.live=()=>{
-  const g=root,L=S.live,ev=L.ev;
+  const g=root,L=S.live,ev=liveEvent();
   // the layout always has MAXT slots, so it never changes size while the reply grows and the camera stays framed
   const ctx=ev?[...ev.ctx]:[...S.valid.slice(-MAXT)],n=ctx.length,sp=1.45,slot=i=>(MAXT-n+i)*sp;
   const qx=(MAXT-1)*sp,qy=5;
@@ -363,8 +364,7 @@ BUILD.live=()=>{
   ball(g,.55,COL.q,[qx,qy,0],null);label(g,'the newest letter asks',[qx,qy+1.2,0],.85,{font:'xkcd Script'});
   let att=null;
   if(ev){
-    const heads=ev.attn[S.liveLayer];
-    att=S.liveHead==='avg'?ctx.map((_,i)=>heads.reduce((s,h)=>s+h[i],0)/heads.length):heads[S.liveHead].slice();
+    att=liveAttention(ev);
     att.forEach((w,i)=>{
       edge(g,[qx,qy,0],[slot(i),.7,0],.03+.28*Math.sqrt(w),0xd33a3a,.35+.65*Math.min(1,w*3));
       if(w>.1)label(g,Math.round(w*100)+'%',[slot(i),1.9,0],.8,{font:'xkcd Script',color:'#d33a3a'});
@@ -387,11 +387,11 @@ BUILD.live=()=>{
   }else label(g,'Waiting for the first letter…',[xb+3*w,0,0],1);
   const xmin=-1.2,xmax=xb+7*w+1.2;
   if(!L.fitted){L.fitted=true;fitCam([(xmin+xmax)/2,.6,0],(xmax-xmin)/2,7.6,[0,.12,1])}   // frame once, so later letters do not move the camera
-  const best=att?att.indexOf(Math.max(...att)):0,pc=v=>Math.round(v*100);
-  const cap=ev?`Letter ${L.n}: it looked hardest at “${show(ctx[best])}” (${pc(att[best])}%). Top choice “${show(ev.top[0][0])}” (${pc(ev.top[0][1])}%), drew “${show(ev.c)}”.${L.done?' Finished.':''}`:'Waiting for the first letter…';
-  return `<div class="grp"><span style="font-size:15px;color:#4d5666">Block</span>${Array.from({length:NLAYER},(_,i)=>`<button class="chipbtn" data-lblock="${i}" aria-pressed="${S.liveLayer===i}">${i+1}</button>`).join('')}</div>
+  const mode=liveMode(),label2={pause:'❚❚ Pause',replay:'↻ Replay',play:'▶ Play'}[mode];
+  return `<div class="grp"><button class="btn" data-live="back" ${L.shown<=0?'disabled':''}>◀ Back</button><button class="btn" data-live="toggle" ${L.steps.length?'':'disabled'}>${label2}</button><button class="btn" data-live="next" ${L.shown>=L.steps.length-1?'disabled':''}>Next ▶</button></div>
+   <div class="grp"><span style="font-size:15px;color:#4d5666">Block</span>${Array.from({length:NLAYER},(_,i)=>`<button class="chipbtn" data-lblock="${i}" aria-pressed="${S.liveLayer===i}">${i+1}</button>`).join('')}</div>
    <div class="grp"><span style="font-size:15px;color:#4d5666">Head</span><button class="chipbtn" data-lhead="avg" aria-pressed="${S.liveHead==='avg'}">avg</button>${Array.from({length:NH},(_,h)=>`<button class="chipbtn" data-lhead="${h}" aria-pressed="${S.liveHead===h}">${h+1}</button>`).join('')}</div>
-   <span style="font-size:15px;color:#4d5666">${cap}</span>`;
+   <span id="livecap" style="font-size:15px;color:#4d5666">${liveCaption()}</span>`;
 };
 
 /* attention: the main dissection */
@@ -506,7 +506,8 @@ function build(keepCam,keepCtl){
   const ctl=BUILD[S.scene]();
   if(!keepCtl){$('#ctl').innerHTML=ctl;$('#ctl').style.display=ctl?'flex':'none'}
   const nm={overview:null,embed:'Embeddings',norm:'Layer norm',attn:'Attention',resid:'Add',ffn:'Feed forward',output:'Output',live:'Live view'}[S.scene];
-  $('#crumbs').innerHTML=S.scene==='overview'?'<span>The whole GPT</span>':`<button class="btn" data-home="1">← The whole GPT</button><span class="sep">›</span><span>${nm}</span>`;
+  const crumbs=S.scene==='overview'?'<span>The whole GPT</span>':`<button class="btn" data-home="1">← The whole GPT</button><span class="sep">›</span><span>${nm}</span>`;
+  if($('#crumbs').dataset.html!==crumbs){$('#crumbs').innerHTML=crumbs;$('#crumbs').dataset.html=crumbs}   // same reason: do not replace a button that is being clicked
   $('#hintbar').style.display=S.scene==='overview'?'':'none';
   teachScene();markFlow();
   if(keepCam&&camGoal&&S.scene!=='live')tween=0;   // the live view keeps its first camera move going
@@ -560,7 +561,7 @@ async function sampleNext(){
   await applyText(S.valid+CHARS[k]);
 }
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-cam],[data-home],[data-part],[data-open],[data-head],[data-sel],[data-resid],[data-layer],[data-lblock],[data-lhead],#sample,#spin,#retry');if(!t)return;
+  const t=e.target.closest('[data-cam],[data-home],[data-part],[data-open],[data-head],[data-sel],[data-resid],[data-layer],[data-lblock],[data-lhead],[data-live],#sample,#spin,#retry');if(!t)return;
   if(t.id==='retry'){applyText(S.valid)}
   else if(t.dataset.cam){
     const L=controls.target.clone(),d=viewDist,c=t.dataset.cam;
@@ -574,6 +575,7 @@ document.addEventListener('click',e=>{
   else if(t.dataset.head!==undefined){S.head=+t.dataset.head;build(true)}
   else if(t.dataset.sel!==undefined){S.sel=+t.dataset.sel;build(true)}
   else if(t.dataset.resid){S.resid=+t.dataset.resid;build(true)}
+  else if(t.dataset.live){const a=t.dataset.live;if(a==='toggle'){liveMode()==='pause'?livePause():livePlay()}else liveStepBy(a==='next'?1:-1)}
   else if(t.dataset.lblock!==undefined){S.liveLayer=+t.dataset.lblock;build(true)}
   else if(t.dataset.lhead!==undefined){S.liveHead=t.dataset.lhead==='avg'?'avg':+t.dataset.lhead;build(true)}
   else if(t.dataset.layer!==undefined){setLayer(+t.dataset.layer)}
@@ -615,9 +617,55 @@ function sweep(){   // lights up the flow chart boxes one after another; a new l
     if(i===FLOW_ORDER.length-1)setTimeout(()=>{sweeping=false},260);
   },i*70));
 }
-function liveStart(){S.live={ev:null,n:0,done:false,fitted:false};go('live')}
-function liveStep(ev){S.live.ev=ev;S.live.n++;sweep();if(S.scene==='live')build(true)}
-function liveEnd(){S.live.done=true;if(S.scene==='live')build(true)}
+const liveEvent=()=>S.live.shown>=0?S.live.steps[S.live.shown]:null;
+function liveAttention(ev){   // how strongly the newest letter looked at each letter shown, for the chosen block and head
+  const heads=ev.attn[S.liveLayer];
+  return S.liveHead==='avg'?[...ev.ctx].map((_,i)=>heads.reduce((s,h)=>s+h[i],0)/heads.length):heads[S.liveHead].slice();
+}
+function liveCaption(){
+  const L=S.live,ev=liveEvent();
+  if(!ev)return 'Waiting for the first letter…';
+  const ctx=[...ev.ctx],att=liveAttention(ev),best=att.indexOf(Math.max(...att)),pc=v=>Math.round(v*100);
+  return `Letter ${L.shown+1} of ${L.steps.length}${L.done?'':' so far'}: it looked hardest at “${show(ctx[best])}” (${pc(att[best])}%). Top choice “${show(ev.top[0][0])}” (${pc(ev.top[0][1])}%), drew “${show(ev.c)}”.${L.done?' Finished.':!L.playing?' Paused: the reply keeps writing in the chat.':''}`;
+}
+/* The buttons are NOT rebuilt for every letter: a button replaced between mouse-down and mouse-up loses the click. */
+function refreshLiveCtl(){
+  if(S.scene!=='live')return;
+  const L=S.live,t=document.querySelector('[data-live="toggle"]'),b=document.querySelector('[data-live="back"]'),n=document.querySelector('[data-live="next"]');
+  if(!t||!b||!n)return;
+  t.textContent={pause:'❚❚ Pause',replay:'↻ Replay',play:'▶ Play'}[liveMode()];t.disabled=!L.steps.length;
+  b.disabled=L.shown<=0;n.disabled=L.shown>=L.steps.length-1;
+  const cap=document.getElementById('livecap');if(cap)cap.textContent=liveCaption();
+}
+const liveAtEnd=()=>S.live.done&&S.live.shown===S.live.steps.length-1;
+function liveMode(){   // what the play button does right now
+  if(liveAtEnd())return 'replay';
+  return S.live.playing?'pause':'play';
+}
+function liveShow(i){S.live.shown=i;sweep();if(S.scene==='live'){build(true,true);refreshLiveCtl()}}   // redraws the 3D scene, keeps the buttons
+function liveStopTimer(){clearInterval(S.live.timer);S.live.timer=null}
+function liveStart(){liveStopTimer();S.live=newLive();go('live')}
+function liveStep(ev){   // a new letter arrived: follow it, unless the view is paused or still catching up
+  const L=S.live;L.steps.push(ev);L.n=L.steps.length;
+  if(L.playing&&!L.timer&&L.shown===L.steps.length-2)liveShow(L.steps.length-1);
+  else refreshLiveCtl();   // only the counts changed
+}
+function liveEnd(){S.live.done=true;refreshLiveCtl()}
+function livePause(){liveStopTimer();S.live.playing=false;refreshLiveCtl()}
+function livePlay(){   // plays the letters you skipped at a readable pace, then follows the reply again
+  const L=S.live;liveStopTimer();L.playing=true;
+  if(liveAtEnd())L.shown=-1;   // replay from the first letter
+  if(L.shown<L.steps.length-1)liveShow(L.shown+1);
+  L.timer=setInterval(()=>{
+    if(!L.playing||L.shown>=L.steps.length-1){liveStopTimer();refreshLiveCtl();return}
+    liveShow(L.shown+1);
+  },700);
+  refreshLiveCtl();
+}
+function liveStepBy(d){   // one letter back or forward, which also pauses
+  const L=S.live;liveStopTimer();L.playing=false;
+  liveShow(clamp(L.shown+d,0,Math.max(0,L.steps.length-1)));
+}
 window.gptApp={applyText,previewText,go,state:S,liveStart,liveStep,liveEnd};   // used by chat.js
 async function start(){
   const h0=(location.hash||'').slice(1);
