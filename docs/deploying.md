@@ -7,12 +7,17 @@ The live site runs on **Render's free plan** from the `Dockerfile` and `render.y
 The trained weights `ai/gpt.pt` (52 MB) are git-ignored, so they are not on `main`. The `deploy` branch is `main`
 plus that file, and Render builds from it.
 
-To update the live site after changing `main`:
+To update the live site after changing `main`, work in a second folder for `deploy`:
 
 ```bash
-git checkout deploy && git merge main
-git push origin deploy && git checkout main
+git worktree add ../My-GPT-deploy deploy     # once
+cd ../My-GPT-deploy
+git merge main
+git push origin deploy
 ```
+
+Do not run `git checkout deploy` in your normal folder. `ai/gpt.pt` is tracked on `deploy` but not on `main`, so switching
+branches there deletes your local copy of the weights.
 
 Render redeploys by itself when the `deploy` branch changes.
 
