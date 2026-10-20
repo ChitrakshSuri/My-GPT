@@ -70,35 +70,38 @@ def trace_endpoint(req: TraceRequest):
 @app.post("/api/generate")
 def generate(req: GenerateRequest):
     model = need_model()
-    with M.LOCK:
-        idx = M.start_context(req.text)
-        new = []
-        for _ in range(req.max_new_tokens):
+    idx = M.start_context(req.text)
+    new = []
+    for _ in range(req.max_new_tokens):
+        with M.LOCK:  # held for one letter only, so other requests can run in between
             nxt = M.next_token(model, idx, req.temperature)
-            idx = M.torch.cat((idx, nxt), dim=1)
-            new.append(nxt.item())
+        idx = M.torch.cat((idx, nxt), dim=1)
+        new.append(nxt.item())
     return {"prompt": req.text, "continuation": gpt.decode(new)}
+
+
+def generate_events(model, req):
+    """The server-sent events of a stream request.
+
+    The lock is held only while one letter is computed, never while waiting for the browser. Otherwise one slow
+    reply would block every other visitor's request until it finished."""
+    idx = M.start_context(req.text)
+    for _ in range(req.max_new_tokens):
+        with M.LOCK:
+            if req.live:
+                nxt, payload = M.next_token_live(model, idx, req.temperature)
+                payload["c"] = gpt.itos[nxt.item()]
+            else:
+                nxt = M.next_token(model, idx, req.temperature)
+                payload = gpt.itos[nxt.item()]  # just the letter
+        idx = M.torch.cat((idx, nxt), dim=1)
+        yield f"data: {json.dumps(payload)}\n\n"
+    yield "data: [DONE]\n\n"
 
 
 @app.post("/api/generate/stream")
 def generate_stream(req: GenerateRequest):
-    model = need_model()
-
-    def events():
-        with M.LOCK:
-            idx = M.start_context(req.text)
-            for _ in range(req.max_new_tokens):
-                if req.live:
-                    nxt, payload = M.next_token_live(model, idx, req.temperature)
-                    payload["c"] = gpt.itos[nxt.item()]
-                else:
-                    nxt = M.next_token(model, idx, req.temperature)
-                    payload = gpt.itos[nxt.item()]  # just the letter
-                idx = M.torch.cat((idx, nxt), dim=1)
-                yield f"data: {json.dumps(payload)}\n\n"
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(events(), media_type="text/event-stream")
+    return StreamingResponse(generate_events(need_model(), req), media_type="text/event-stream")
 
 
 # the website: must come last, so the /api routes above are matched first
