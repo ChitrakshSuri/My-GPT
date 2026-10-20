@@ -1,0 +1,23 @@
+name: Keep the site awake
+
+# Render's free plan puts the site to sleep after 15 minutes without visitors.
+# This calls the health endpoint every 5 minutes so it stays awake.
+# It uses free instance hours: an always-awake service uses about 744 of the 750 hours Render gives per month.
+# To stop it: disable this workflow in the Actions tab, or delete this file. More in docs/deploying.md.
+on:
+  schedule:
+    - cron: "2-59/5 * * * *"   # every 5 minutes from minute 2 (GitHub runs jobs at :00 late when it is busy)
+  workflow_dispatch:            # lets you run it by hand from the Actions tab
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Call the health endpoint
+        # 90 seconds is enough for a cold start, which took 43 seconds when measured
+        run: |
+          curl --fail --silent --show-error --max-time 90 --retry 2 --retry-delay 10 \
+            https://gpt-anatomy.onrender.com/api/health
