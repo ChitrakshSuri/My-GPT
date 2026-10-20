@@ -32,6 +32,9 @@ one step at a time.
     watch the whole model run again.
 - **Chat with it.** The Chat tab streams a continuation one character at a time. *Visualize this* sends that text
   into the 3D views.
+- **Watch it write.** While a reply streams in, the left side shows the model working on every letter: the flow chart
+  lights up box by box, the newest letter looks back at the letters before it (pick the block and head), and the eight
+  most likely next letters appear with the one it drew. Untick *Watch inside the model* in the Chat tab to turn it off.
 
 ## How it works
 
@@ -48,6 +51,9 @@ flowchart LR
   so the model code stays untouched.
 - The page draws small slices so that everything stays readable: the first 16 of the 384 numbers per token, and 64 of
   the 1536 feed-forward neurons.
+- For the live view, each step of the stream also sends the attention of the newest letter over the last 12 letters,
+  read from the same forward pass that picks the letter, so it costs almost nothing extra.
+- The model is guarded by a lock, held for one letter at a time, so a slow chat reply cannot block other visitors.
 - It is one container: FastAPI serves both the API and the website.
 
 ## The model
@@ -98,8 +104,8 @@ Download `gpt.pt` and `vocab.json` into the `ai/` folder. To train locally inste
 ## Tests
 
 ```bash
-uv run pytest backend/tests                # 38 unit and API tests, about 15 seconds, no trained weights needed
-uv run pytest backend/tests -m e2e         # 17 browser tests with Playwright, about 2 minutes, needs Chrome
+uv run pytest backend/tests                # 43 unit and API tests, about 15 seconds, no trained weights needed
+uv run pytest backend/tests -m e2e         # 21 browser tests with Playwright, about 2 minutes, needs Chrome
 ```
 
 ## API
@@ -111,7 +117,7 @@ uv run pytest backend/tests -m e2e         # 17 browser tests with Playwright, a
 | `GET /api/token-table?dims=16` | first numbers of every token embedding |
 | `POST /api/trace` | every intermediate tensor for a text (`layers` and `include_hidden` choose what to return) |
 | `POST /api/generate` | continue a text |
-| `POST /api/generate/stream` | the same, one character at a time (server-sent events) |
+| `POST /api/generate/stream` | the same, one character at a time (server-sent events). With `"live": true` each step also carries the top 8 candidate letters and the newest letter's attention, which the live view draws |
 
 ## Deploying
 
