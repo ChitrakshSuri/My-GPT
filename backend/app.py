@@ -39,7 +39,7 @@ class GenerateRequest(BaseModel):
     live: bool = False  # stream mode only: also send what the live view draws for each letter
 
 
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD"])   # uptime monitors often probe with HEAD
 def health():
     return {"ok": MODEL is not None, "vocab_size": gpt.vocab_size,
             "parameters": sum(p.numel() for p in MODEL.parameters()) if MODEL else None}

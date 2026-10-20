@@ -185,3 +185,9 @@ def test_other_requests_can_run_in_the_middle_of_a_reply(client, model):
     assert code == 200                                                                # a trace fits in between
     assert client.get("/api/health").status_code == 200
     assert len(list(events)) == 4                                                     # the reply carries on: 3 letters and [DONE]
+
+
+def test_health_answers_head_requests_for_uptime_monitors(client):
+    head = client.head("/api/health")
+    assert head.status_code == 200 and head.content == b""
+    assert client.get("/api/health").json()["ok"] is True
