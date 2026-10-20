@@ -1,5 +1,4 @@
 # One container: FastAPI runs the model and also serves the website.
-# Built for Hugging Face Spaces (Docker SDK), which expects the app on port 7860.
 FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.24 /uv /usr/local/bin/uv
@@ -24,4 +23,5 @@ COPY --chown=user frontend frontend
 
 USER user
 EXPOSE 7860
-CMD ["uvicorn", "app:app", "--app-dir", "backend", "--host", "0.0.0.0", "--port", "7860"]
+# hosts like Render and Cloud Run say which port to use through $PORT; 7860 is the default for local runs
+CMD ["sh", "-c", "exec uvicorn app:app --app-dir backend --host 0.0.0.0 --port ${PORT:-7860}"]
