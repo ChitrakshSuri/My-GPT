@@ -36,6 +36,7 @@ class GenerateRequest(BaseModel):
     text: str = Field("", max_length=500)
     max_new_tokens: int = Field(100, ge=1, le=500)
     temperature: float = Field(1.0, ge=0.1, le=2.0)
+    live: bool = False  # stream mode only: also send what the live view draws for each letter
 
 
 @app.get("/api/health")
@@ -87,9 +88,14 @@ def generate_stream(req: GenerateRequest):
         with M.LOCK:
             idx = M.start_context(req.text)
             for _ in range(req.max_new_tokens):
-                nxt = M.next_token(model, idx, req.temperature)
+                if req.live:
+                    nxt, payload = M.next_token_live(model, idx, req.temperature)
+                    payload["c"] = gpt.itos[nxt.item()]
+                else:
+                    nxt = M.next_token(model, idx, req.temperature)
+                    payload = gpt.itos[nxt.item()]  # just the letter
                 idx = M.torch.cat((idx, nxt), dim=1)
-                yield f"data: {json.dumps(gpt.itos[nxt.item()])}\n\n"
+                yield f"data: {json.dumps(payload)}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(events(), media_type="text/event-stream")
